@@ -27,11 +27,9 @@ export default async (req) => {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
     if (!GEMINI_API_KEY) {
-      console.error("GEMINI_API_KEY is missing");
-
       return new Response(
         JSON.stringify({
-          error: "Server configuration error: API key missing",
+          error: "GEMINI_API_KEY is missing in Netlify",
         }),
         {
           status: 500,
@@ -42,11 +40,7 @@ export default async (req) => {
 
     const body = await req.json();
 
-    const {
-      prompt,
-      systemInstruction,
-      schema,
-    } = body;
+    const { prompt, systemInstruction, schema } = body;
 
     if (!prompt) {
       return new Response(
@@ -61,7 +55,7 @@ export default async (req) => {
     }
 
     const apiUrl =
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
     const payload = {
       contents: [
@@ -96,6 +90,7 @@ export default async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
       },
       body: JSON.stringify(payload),
     });
@@ -115,7 +110,7 @@ export default async (req) => {
           details: responseText,
         }),
         {
-          status: response.status,
+          status: 500,
           headers,
         }
       );
