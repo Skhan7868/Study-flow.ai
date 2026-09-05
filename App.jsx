@@ -70,100 +70,135 @@ try {
 // 2. SECURE GEMINI API SERVICE
 // ==========================================
 
-const callGemini = async (prompt, systemInstruction, schema) => {
+const callGemini = async (
+  prompt,
+  systemInstruction,
+  schema
+) => {
+  const controller = new AbortController();
 
-  const maxRetries = 3;
-  const baseDelay = 1000;
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, 25000);
 
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+  try {
+    const response = await fetch(
+      '/.netlify/functions/generate-plan',
+      {
+        method: 'POST',
+
+        headers: {
+          'Content-Type': 'application/json'
+        },
+
+        body: JSON.stringify({
+          prompt,
+          systemInstruction,
+          schema
+        }),
+
+        signal: controller.signal
+      }
+    );
+
+    const responseText = await response.text();
+
+    let responseData = {};
 
     try {
+      responseData = responseText
+        ? JSON.parse(responseText)
+        : {};
+    } catch {
+      responseData = {
+        error:
+          responseText ||
+          'Invalid server response.'
+      };
+    }
 
-      const response = await fetch(
-        '/.netlify/functions/generate-plan',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            prompt,
-            systemInstruction,
-            schema
-          })
-        }
-      );
+    // ------------------------------------------
+    // BACKEND ERROR
+    // ------------------------------------------
 
-      // Read response safely
-      const responseText = await response.text();
+    if (!response.ok) {
+      const errorMessage =
+        responseData?.details ||
+        responseData?.error ||
+        `API Error: ${response.status}`;
 
-      let responseData = {};
-
-      try {
-        responseData = responseText
-          ? JSON.parse(responseText)
-          : {};
-      } catch {
-        responseData = {
-          error: responseText
-        };
-      }
-
-      // IMPORTANT:
-      // Show the actual backend/Gemini error instead of only 404/500.
-      if (!response.ok) {
-
-        const errorMessage =
-          responseData?.details ||
-          responseData?.error ||
-          `API Error: ${response.status}`;
-
-        throw new Error(
-          typeof errorMessage === 'string'
-            ? errorMessage
-            : JSON.stringify(errorMessage)
-        );
-      }
-
-      if (!responseData?.success) {
-
-        throw new Error(
-          responseData?.error ||
-          "Gemini returned an unsuccessful response."
-        );
-      }
-
-      if (!responseData?.data) {
-        throw new Error(
-          "Gemini returned an empty response."
-        );
-      }
-
-      return responseData.data;
-
-    } catch (error) {
-
-      console.error(
-        `Gemini attempt ${attempt + 1} failed:`,
-        error
-      );
-
-      if (attempt === maxRetries - 1) {
-        throw error;
-      }
-
-      await new Promise(resolve =>
-        setTimeout(
-          resolve,
-          baseDelay * Math.pow(2, attempt)
-        )
+      throw new Error(
+        typeof errorMessage === 'string'
+          ? errorMessage
+          : JSON.stringify(errorMessage)
       );
     }
-  }
 
-  throw new Error("Gemini request failed.");
+    // ------------------------------------------
+    // BACKEND SUCCESS CHECK
+    // ------------------------------------------
+
+    if (!responseData?.success) {
+      throw new Error(
+        responseData?.error ||
+        'Gemini returned an unsuccessful response.'
+      );
+    }
+
+    // ------------------------------------------
+    // EMPTY RESPONSE CHECK
+    // ------------------------------------------
+
+    if (
+      responseData?.data === undefined ||
+      responseData?.data === null
+    ) {
+      throw new Error(
+        'Gemini returned an empty response.'
+      );
+    }
+
+    return responseData.data;
+
+  } catch (error) {
+
+    console.error(
+      'Gemini request failed:',
+      error
+    );
+
+    // ------------------------------------------
+    // TIMEOUT ERROR
+    // ------------------------------------------
+
+    if (error?.name === 'AbortError') {
+      throw new Error(
+        'AI response took too long. Please try again.'
+      );
+    }
+
+    // ------------------------------------------
+    // NETWORK ERROR
+    // ------------------------------------------
+
+    if (
+      error?.message === 'Failed to fetch'
+    ) {
+      throw new Error(
+        'Unable to connect to the AI server. Please check your internet connection and try again.'
+      );
+    }
+
+    throw error;
+
+  } finally {
+
+    clearTimeout(timeoutId);
+
+  }
 };
 
+      
 
 // ==========================================
 // 3. AI SCHEMAS
