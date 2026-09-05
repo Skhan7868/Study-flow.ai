@@ -1,3 +1,4 @@
+// Netlify Function for Gemini API
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
