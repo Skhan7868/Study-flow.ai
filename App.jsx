@@ -57,7 +57,7 @@ const callGemini = async (prompt, systemInstruction, schema) => {
     try {
       if (isCanvas) {
         // Canvas magic environment interception
-        const apiKey = "AQ.Ab8RN6I8zcDrhqSltcG_IgnCKx6nK5GK9UTNd2yZo4eInaoaqw"; 
+        const apiKey = "AQ.Ab8RN6LeWowGs5NjcEJdOi6VlkfFdNOT406GPJz1BIE1UrX5LQ"; 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
         const payload = {
           contents: [{ parts: [{ text: prompt }] }],
@@ -76,15 +76,15 @@ const callGemini = async (prompt, systemInstruction, schema) => {
         return JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
 
       } else {
-        // Normal Chrome Browser - Route to local Node.js backend securely
-        const response = await fetch('http://localhost:3001/api/gemini', {
+        // Netlify Function call
+        const response = await fetch('/.netlify/functions/generate-plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt, systemInstruction, schema })
         });
 
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
         const data = await response.json();
-        if (!data.success) throw new Error(data.error);
         return data.data;
       }
     } catch (error) {
@@ -800,7 +800,7 @@ function ProgressView({ stats, navigate, subjects }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 shadow-sm">
-          <h3 className="text-lg font-bold text-emerald-800 mb-4 flex items-center gap-2"><CheckCircle className="w-5 h-5" /> Strongest Areas (â‰¥70%)</h3>
+          <h3 className="text-lg font-bold text-emerald-800 mb-4 flex items-center gap-2"><CheckCircle className="w-5 h-5" /> Strongest Areas (≥70%)</h3>
           {stats.strongTopics.length === 0 ? <p className="text-emerald-700/80 text-sm">Complete some tests to build your strong topics list.</p> : (
             <div className="space-y-3">
               {stats.strongTopics.map(topic => (<div key={topic.id} className="bg-white p-3 rounded-xl flex justify-between items-center shadow-sm border border-emerald-50"><div><h4 className="font-semibold text-slate-900 text-sm">{topic.name}</h4></div><span className="font-bold text-emerald-600">{topic.lastScore}%</span></div>))}
