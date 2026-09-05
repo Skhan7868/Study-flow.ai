@@ -55,38 +55,17 @@ const callGemini = async (prompt, systemInstruction, schema) => {
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      if (isCanvas) {
-        // Canvas magic environment interception
-        const apiKey = "AQ.Ab8RN6LeWowGs5NjcEJdOi6VlkfFdNOT406GPJz1BIE1UrX5LQ"; 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-        const payload = {
-          contents: [{ parts: [{ text: prompt }] }],
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          generationConfig: { responseMimeType: "application/json", responseSchema: schema }
-        };
+      // Sab jagah Netlify Function use karo - NO hardcoded API key!
+      const response = await fetch('/.netlify/functions/generate-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, systemInstruction, schema })
+      });
 
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+      if (!response.ok) throw new Error(`API Error: ${response.status}`);
+      const data = await response.json();
+      return data.data;
 
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-        const data = await response.json();
-        return JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
-
-      } else {
-        // Netlify Function call
-        const response = await fetch('/.netlify/functions/generate-plan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, systemInstruction, schema })
-        });
-
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-        const data = await response.json();
-        return data.data;
-      }
     } catch (error) {
       if (attempt === maxRetries - 1) throw error;
       await new Promise(res => setTimeout(res, baseDelay * Math.pow(2, attempt)));
