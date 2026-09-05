@@ -19,58 +19,62 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const { subject, time, syllabus } = JSON.parse(event.body);
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     
-    const prompt = `Create a detailed study plan for:
-Subject: ${subject}
-Available time: ${time} minutes per day
-Syllabus: ${syllabus}
-
-Break this into daily sessions. Return JSON format:
-{
-  "plan": [
-    {
-      "day": 1,
-      "topic": "topic name",
-      "duration": ${time},
-      "subtopics": ["subtopic1", "subtopic2"],
-      "notes": "brief description"
+    if (!GEMINI_API_KEY) {
+      console.error("ERROR: GEMINI_API_KEY not found!");
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ error: 'Server config error: API key missing' })
+      };
     }
-  ],
-  "totalDays": number,
-  "summary": "brief summary"
-}`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
-      }
-    );
+    const { prompt, systemInstruction, schema } = JSON.parse(event.body);
+    
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      generationConfig: { responseMimeType: "application/json" }
+    };
+
+    if (schema) {
+      payload.generationConfig.responseSchema = schema;
+    }
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API Error:", errorText);
+      throw new Error(`API Error ${response.status}: ${errorText}`);
+    }
 
     const data = await response.json();
     const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     
-    let plan;
+    let result;
     try {
       const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
-      plan = jsonMatch ? JSON.parse(jsonMatch[0]) : { plan: [], summary: generatedText };
+      result = jsonMatch ? JSON.parse(jsonMatch[0]) : { summary: generatedText };
     } catch {
-      plan = { plan: [], summary: generatedText };
+      result = { summary: generatedText };
     }
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, data: plan })
+      body: JSON.stringify({ success: true, data: result })
     };
 
   } catch (error) {
+    console.error("Function Error:", error);
     return {
       statusCode: 500,
       headers,
