@@ -1,0 +1,168 @@
+export default async (req) => {
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Content-Type": "application/json",
+  };
+
+  if (req.method === "OPTIONS") {
+    return new Response("", {
+      status: 200,
+      headers,
+    });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      {
+        status: 405,
+        headers,
+      }
+    );
+  }
+
+  try {
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+    if (!GEMINI_API_KEY) {
+      console.error("GEMINI_API_KEY is missing");
+
+      return new Response(
+        JSON.stringify({
+          error: "Server configuration error: API key missing",
+        }),
+        {
+          status: 500,
+          headers,
+        }
+      );
+    }
+
+    const body = await req.json();
+
+    const {
+      prompt,
+      systemInstruction,
+      schema,
+    } = body;
+
+    if (!prompt) {
+      return new Response(
+        JSON.stringify({
+          error: "Prompt is missing",
+        }),
+        {
+          status: 400,
+          headers,
+        }
+      );
+    }
+
+    const apiUrl =
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+    const payload = {
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
+    };
+
+    if (systemInstruction) {
+      payload.systemInstruction = {
+        parts: [
+          {
+            text: systemInstruction,
+          },
+        ],
+      };
+    }
+
+    if (schema) {
+      payload.generationConfig.responseSchema = schema;
+    }
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      console.error(
+        "Gemini API Error:",
+        response.status,
+        responseText
+      );
+
+      return new Response(
+        JSON.stringify({
+          error: `Gemini API returned ${response.status}`,
+          details: responseText,
+        }),
+        {
+          status: response.status,
+          headers,
+        }
+      );
+    }
+
+    const data = JSON.parse(responseText);
+
+    const generatedText =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    let result;
+
+    try {
+      result = JSON.parse(generatedText);
+    } catch {
+      const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
+
+      if (jsonMatch) {
+        result = JSON.parse(jsonMatch[0]);
+      } else {
+        result = {
+          summary: generatedText,
+        };
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: result,
+      }),
+      {
+        status: 200,
+        headers,
+      }
+    );
+  } catch (error) {
+    console.error("Function Error:", error);
+
+    return new Response(
+      JSON.stringify({
+        error: error?.message || "Unknown server error",
+      }),
+      {
+        status: 500,
+        headers,
+      }
+    );
+  }
+};
